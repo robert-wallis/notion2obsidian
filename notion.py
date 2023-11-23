@@ -6,11 +6,12 @@
 import csv
 import os
 import re
+from typing import TextIO
 
 
-MARKDOWN_LINK_PATTERN = re.compile('\[([^\]]+)\]\(([^\]]+)\)')
-URL_MD5_PATTERN = re.compile('%20[a-fA-F0-9]{32}')
-MD5_PATTERN = re.compile('\s*[a-fA-F0-9]{32}')
+MARKDOWN_LINK_PATTERN = re.compile(r'\[([^\]]+)\]\(([^\]]+)\)')
+URL_MD5_PATTERN = re.compile(r'%20[a-fA-F0-9]{32}')
+MD5_PATTERN = re.compile(r'\s*[a-fA-F0-9]{32}')
 
 
 def main():
@@ -23,7 +24,7 @@ def walk_links(rootpath: str):
             if '.md' == filename[-3:]:
                 remove_md5_from_filename_and_markdown_links(rootpath, filename)
             if '.csv' == filename[-4:]:
-                migrate_notion_table_to_obsidian_kanban(rootpath, filename)
+                process_csv(rootpath, filename)
         for dirname in dirs:
             walk_links(dirname)
 
@@ -76,13 +77,54 @@ def remove_md5_from_filename(filename: str):
     return filename
 
 
-def migrate_notion_table_to_obsidian_kanban(rootpath: str, filename: str):
-    filename = os.path.join(rootpath, filename)
-    cleaned = remove_md5_from_filename(filename)
-    cleaned.replace('.csv', '.md')
+def process_csv(rootpath: str, filename: str):
+    """When a csv file is found, convert it to a kanban.
+    >>> import tempfile
+    >>> tdir = tempfile.TemporaryDirectory()
+    >>> csv_filename = 'test aAbBcCdDeEfF00112233445566778899.csv'
+    >>> with open(os.path.join(tdir.name, csv_filename), mode='w') as temp_file:
+    ...     temp_file.write('\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n')
+    52
+    >>> process_csv(tdir.name, csv_filename)
+    >>> print(os.listdir(tdir.name))
+    ['test aAbBcCdDeEfF00112233445566778899.csv', 'test.md']
+    """
+    csv_filename = os.path.join(rootpath, filename)
+    kanban_filename = remove_md5_from_filename(csv_filename)
+    kanban_filename = kanban_filename.replace('.csv', '.md')
+    migrate_notion_table_to_obsidian_kanban(csv_filename, kanban_filename)
 
+
+def migrate_notion_table_to_obsidian_kanban(csv_filename: str, kanban_filename: str):
+    """Migrates a notion.so table to an obsidian kanban file.
+    >>> import tempfile
+    >>> csv_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+    >>> csv_file.write('\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n')
+    52
+    >>> csv_file.close()
+    >>> kanban_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+    >>> migrate_notion_table_to_obsidian_kanban(csv_file.name, kanban_file.name)
+    >>> with open(kanban_file.name, mode='r') as k_file:
+    ...     contents = k_file.read()
+    ...     expected_header = '---\\nkanban-plugin: basic\\n---\\n'
+    ...     actual_header = contents[0:len(expected_header)]
+    ...     if actual_header != expected_header:
+    ...         raise Exception(f"header wrong:\\n{actual_header}\\n\\nexpected:\\n{expected_header}")
+    ...     expected_column = '## Doing\\n\\n'
+    ...     actual_column = contents[len(expected_header):len(expected_header)+len(expected_column)]
+    ...     if actual_column != expected_column:
+    ...         raise Exception(f"column wrong:\\n{actual_column}\\n\\nexpected:\\n{expected_column}")
+    ...     expected_card = '- [ ] Work on CSV Exporter #notion\\n'
+    ...     actual_card = contents[len(expected_header)+len(expected_column):len(expected_header)+len(expected_column)+len(expected_card)]
+    ...     if actual_card != expected_card:
+    ...         raise Exception(f"card wrong:\\n{actual_card}\\n\\nexpected:\\n{expected_card}")
+    ...     expected_footer = '\\n\\n'
+    ...     actual_footer = contents[len(expected_header)+len(expected_column)+len(expected_card):]
+    ...     if actual_footer != expected_footer:
+    ...         raise Exception(f"footer wrong:\\n{actual_footer}\\n\\nexpected:\\n{expected_footer}")
+    """
     # open the csv
-    records = records_from_csv(filename)
+    records = records_from_csv(csv_filename)
     if len(records) == 0:
         return
     first_record = records[0]
@@ -93,7 +135,7 @@ def migrate_notion_table_to_obsidian_kanban(rootpath: str, filename: str):
     unknown_params = unknown_record_params(first_record, [title_key, 'Status', 'Tags'])
 
     # write the kanban file
-    with open(cleaned, mode='w') as kanban:
+    with open(kanban_filename, mode='w') as kanban:
         # this is the markdown header for the kanban
         kanban.write('---')
         kanban.write('\n')
