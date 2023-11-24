@@ -1,8 +1,8 @@
 .PHONY: test coverage
 
 test:
-	python3 -m doctest notion.py
+	pytest --doctest-modules
 
 coverage:
-	coverage run -m doctest notion.py
-	coverage report -m
+	coverage run -m pytest --doctest-modules notion2obsidian.py
+	coverage report -m notion2obsidian.py

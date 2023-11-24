@@ -13,6 +13,6 @@ If you'd like to hack on notion2obsidian these commands will help you get starte
 ```
 make test
 
-pip3 install coverage
+pip3 install pytest coverage
 make coverage
 ```

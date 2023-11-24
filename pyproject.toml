@@ -1,0 +1,20 @@
+[project]
+name = "notion2obsidian"
+version = "0.1.0"
+authors = [
+	{ name = "Robert Wallis", email = "smilingrob@gmail.com" },
+]
+description = "Convert Notion.so export to Obsidian.md vault"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+	"Development Status :: 2 - Pre-Alpha",
+	"Environment :: Console",
+	"Intended Audience :: Users",
+	"License :: OSI Approved :: MIT License",
+	"Operating System :: OS Independent",
+]
+
+[tool.notion2obsidian.scripts]
+notion2obsidian = "notion2obsidian:main"
+
