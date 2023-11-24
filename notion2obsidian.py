@@ -197,6 +197,13 @@ def process_csv(csv_file: TextIO, kanban_file: TextIO):
     ---
     ## Doing
     - [ ] Work on CSV Exporter #notion
+
+
+    Empty CSV File
+    >>> csv_file = io.StringIO('\ufeffName,Status,Tags\\n')
+    >>> kanban_file = io.StringIO()
+    >>> process_csv(csv_file, kanban_file)
+
     """
     # open the csv
     records = records_from_csv(csv_file)
@@ -302,6 +309,9 @@ def statuses_from_csv(csv_data: list[dict], default_status='TODO'):
     csv_data is a list of dicts, each dict is a row in the csv file.
     >>> statuses_from_csv([{'Status': ''}, {'Status': 'Doing'}, {'Status': 'Done'}])
     ['', 'Doing', 'Done']
+
+    >>> statuses_from_csv([{}, {}, {}])
+    ['TODO']
     """
     statuses = []
     for row in csv_data:
@@ -330,6 +340,9 @@ def unknown_record_params(record: dict, known_params: list[str]):
     record is a dict, each key is a column in the csv file.
     >>> unknown_record_params({'Name': 'Work on CSV Exporter', 'Status': 'Doing', 'Tags': 'notion'}, ['Name', 'Status', 'Tags'])
     []
+
+    >>> unknown_record_params({'Name': 'Work on CSV Exporter', 'Priority': '2'}, ['Name', 'Status', 'Tags'])
+    ['Priority']
     """
     result = []
     for key in record.keys():
