@@ -5,9 +5,11 @@
 #
 # Copyright (C) 2023 Robert Wallis, All Rights Reserved.
 
+from typing import TextIO
 import csv
 import os
 import re
+import sys
 
 
 MARKDOWN_LINK_PATTERN = re.compile(r'\[([^\]]+)\]\(([^\]]+)\)')
@@ -16,49 +18,124 @@ MD5_PATTERN = re.compile(r'\s*[a-fA-F0-9]{32}')
 
 
 def main():
-    walk_files('.')
+    """CLI for notion2obsidian.py"""
+    if len(sys.argv) == 2:
+        option = sys.argv[1]
+        if os.path.isfile(option):
+            if '.zip' == option[-4:]:
+                notion_zip(option)
+                return
+        elif os.path.isdir(option):
+            walk_files(option)
+            return
+
+    print(f"Usage: {sys.argv[0]} <notion_export.zip>|<notion_export_folder>", file=sys.stderr)
+
+
+def delete_path(rootpath: str):
+    if os.path.exists(rootpath):
+        for (rootpath, dirs, files) in os.walk(rootpath):
+            for filename in files:
+                fullpath = os.path.join(rootpath, filename)
+                os.remove(fullpath)
+            for dirname in dirs:
+                os.rmdir(dirname)
+        os.rmdir(rootpath)
 
 
 def walk_files(rootpath: str):
     """Recrusively go through folder looking for files to convert, and convert them.
+    >>> delete_path('test_data/export')
+    >>> walk_files('test_data')
+    test_data/export/Example.md
+    >>> os.listdir('test_data/export')
+    ['Example.md']
+    >>> delete_path('test_data/export')
     """
+    # delete everything in the directory rootpath
     for (rootpath, dirs, files) in os.walk(rootpath):
         for filename in files:
-            if '.md' == filename[-3:]:
-                process_markdown(rootpath, filename)
-            if '.csv' == filename[-4:]:
-                process_csv(rootpath, filename)
+            fullpath = os.path.join(rootpath, filename)
+            if '__MACOSX' == filename[:8]:
+                # these files are some binary Apple provenance file with a .md extension
+                continue
+            elif '.md' == filename[-3:]:
+                outfile = remove_md5_from_filename(fullpath)
+                clean_and_make_dir_for_filename(outfile)
+                print(outfile)
+                process_markdown(open(fullpath, mode='r'), open(outfile, mode='w'))
+            elif '.csv' == filename[-4:]:
+                outfile = remove_md5_from_filename(fullpath)
+                clean_and_make_dir_for_filename(outfile)
+                print(outfile)
+                # skip the BOM by opening as a utf-8-sig
+                process_csv(open(fullpath, mode='r', encoding='utf-8-sig'), open(outfile, mode='w'))
         for dirname in dirs:
             walk_files(dirname)
 
 
-def process_markdown(rootpath: str, filename: str):
-    """When a markdown file is found, fix the links and file name
+def notion_zip(zip_filename: str):
+    """Unzips a notion.so export, and converts the files.
+    >>> delete_path('test_data/export')
+    >>> notion_zip('test_data/export.zip')
+    test_data/export/Example.md
+    >>> os.listdir('test_data/export')
+    ['Example.md']
+    >>> delete_path('test_data/export')
     """
-    filename = os.path.join(rootpath, filename)
-    cleaned = remove_md5_from_filename(filename)
-    filename_out = f"{cleaned}.out"
-    if filename == cleaned:
-        print(filename)
-    else:
-        cleaned_path = remove_md5_from_filename(rootpath)
-        if cleaned_path != rootpath:
-            print(f"mkdir {cleaned_path}")
-            os.makedirs(cleaned_path, exist_ok=True)
+    import zipfile
+    rootpath = os.path.dirname(zip_filename)
+    with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
+        for filename in zip_ref.namelist():
+            if '__MACOSX' == filename[:8]:
+                # these files are some binary Apple provenance file with a .md extension
+                continue
+            elif '.md' == filename[-3:]:
+                outfile = os.path.join(rootpath, filename)
+                outfile = remove_md5_from_filename(outfile)
+                clean_and_make_dir_for_filename(outfile)
+                in_file = zip_ref.open(filename)
+                import io
+                in_file = io.TextIOWrapper(io.BytesIO(zip_ref.read(filename)), encoding='utf-8-sig')
+                print(outfile)
+                process_markdown(in_file, open(outfile, mode='w'))
+            elif '.csv' == filename[-4:]:
+                outfile = os.path.join(rootpath, filename)
+                outfile = remove_md5_from_filename(outfile)
+                clean_and_make_dir_for_filename(outfile)
+                import io
+                in_file = io.TextIOWrapper(io.BytesIO(zip_ref.read(filename)), encoding='utf-8-sig')
+                print(outfile)
+                process_csv(in_file, open(outfile, mode='w'))
+            else:
+                zip_ref.extract(filename)
 
-    with open(filename) as file, open(filename_out, mode='w') as file_out:
-        for line in file:
-            matches = MARKDOWN_LINK_PATTERN.findall(line)
-            for title, url in matches:
-                url2 = remove_md5_from_url(url)
-                if len(url2) and url != url2:
-                    print(f" title: {title}")
-                    print(f"    url1: {url}")
-                    print(f"    url2: {url2}")
-                    line = line.replace(url, url2)
-            file_out.write(line)
 
-    os.rename(filename_out, cleaned)
+def clean_and_make_dir_for_filename(filename: str):
+    """Makes a folder if it doesn't exist."""
+    dirname = os.path.dirname(filename)
+    cleaned = remove_md5_from_filename(dirname)
+    if not os.path.exists(cleaned):
+        os.makedirs(cleaned, exist_ok=True)
+
+
+def process_markdown(in_file: TextIO, out_file: TextIO):
+    """When a markdown file is found, fix the links and file name
+    >>> import io
+    >>> in_file = io.StringIO('# Test\\n[link](https://example.com/123%20aAbBcCdDeEfF00112233445566778899.md)')
+    >>> out_file = io.StringIO()
+    >>> process_markdown(in_file, out_file)
+    >>> print(out_file.getvalue()) # doctest: +NORMALIZE_WHITESPACE
+    # Test
+    [link](https://example.com/123.md)
+    """
+    for line in in_file:
+        matches = MARKDOWN_LINK_PATTERN.findall(line)
+        for _title, url in matches:
+            url2 = remove_md5_from_url(url)
+            if len(url2) and url != url2:
+                line = line.replace(url, url2)
+        out_file.write(line)
 
 
 def remove_md5_from_url(url: str):
@@ -82,48 +159,21 @@ def remove_md5_from_filename(filename: str):
     return filename
 
 
-def process_csv(rootpath: str, filename: str):
-    """When a csv file is found, convert it to a kanban.
-    >>> import tempfile
-    >>> tdir = tempfile.TemporaryDirectory()
-    >>> csv_filename = 'test aAbBcCdDeEfF00112233445566778899.csv'
-    >>> with open(os.path.join(tdir.name, csv_filename), mode='w') as temp_file:
-    ...     temp_file.write('\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n')
-    52
-    >>> process_csv(tdir.name, csv_filename)
-    >>> print(os.listdir(tdir.name))
-    ['test aAbBcCdDeEfF00112233445566778899.csv', 'test.md']
-    """
-    csv_filename = os.path.join(rootpath, filename)
-    kanban_filename = remove_md5_from_filename(csv_filename)
-    if kanban_filename != csv_filename:
-        cleaned_path = remove_md5_from_filename(rootpath)
-        if cleaned_path != rootpath:
-            print(f"mkdir {cleaned_path}")
-            os.makedirs(cleaned_path, exist_ok=True)
-    kanban_filename = kanban_filename.replace('.csv', '.md')
-    migrate_notion_table_to_obsidian_kanban(csv_filename, kanban_filename)
-
-
-def migrate_notion_table_to_obsidian_kanban(csv_filename: str, kanban_filename: str):
+def process_csv(csv_file: TextIO, kanban_file: TextIO):
     """Migrates a notion.so table to an obsidian kanban file.
-    >>> import tempfile
-    >>> csv_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
-    >>> csv_file.write('\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n')
-    52
-    >>> csv_file.close()
-    >>> kanban_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
-    >>> migrate_notion_table_to_obsidian_kanban(csv_file.name, kanban_file.name)
-    >>> print(open(kanban_file.name, mode='r').read()) # doctest: +NORMALIZE_WHITESPACE
+    >>> import io
+    >>> csv_file = io.StringIO('\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n')
+    >>> kanban_file = io.StringIO()
+    >>> process_csv(csv_file, kanban_file)
+    >>> print(kanban_file.getvalue()) # doctest: +NORMALIZE_WHITESPACE
     ---
     kanban-plugin: basic
     ---
     ## Doing
     - [ ] Work on CSV Exporter #notion
-    >>> os.remove(csv_file.name)
     """
     # open the csv
-    records = records_from_csv(csv_filename)
+    records = records_from_csv(csv_file)
     if len(records) == 0:
         return
     first_record = records[0]
@@ -134,17 +184,16 @@ def migrate_notion_table_to_obsidian_kanban(csv_filename: str, kanban_filename: 
     unknown_params = unknown_record_params(first_record, [title_key, 'Status', 'Tags'])
 
     # write the kanban file
-    with open(kanban_filename, mode='w') as kanban:
-        kanban_write_header(kanban)
+    kanban_write_header(kanban_file)
 
-        for status in statuses:
-            kanban_write_column(kanban, status)
-            if status in status_records:
-                for record in status_records[status]:
-                    tags = [record['Tags']] if 'Tags' in record else []
-                    params = {p:record[p] for p in unknown_params if p in record}
-                    kanban_write_card(kanban, status, record[title_key], tags, params)
-            kanban.write('\n\n')
+    for status in statuses:
+        kanban_write_column(kanban_file, status)
+        if status in status_records:
+            for record in status_records[status]:
+                tags = [record['Tags']] if 'Tags' in record else []
+                params = {p:record[p] for p in unknown_params if p in record}
+                kanban_write_card(kanban_file, status, record[title_key], tags, params)
+        kanban_file.write('\n\n')
 
 
 def kanban_write_header(kanban_file):
@@ -209,22 +258,16 @@ def kanban_write_card(kanban_file, status:str, title:str, tags:list[str], unknow
     kanban_file.write(line)
     kanban_file.write('\n')
 
-def records_from_csv(filename: str):
+def records_from_csv(csv_file: TextIO):
     """Reads a csv file, and returns an array of dicts.
-    >>> import tempfile
-    >>> file_data = '\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n'
-    >>> temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
-    >>> temp_file.write(file_data)
-    52
-    >>> temp_file.close()
-    >>> records_from_csv(temp_file.name)
+    >>> import io
+    >>> csv_file = io.StringIO('Name,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n')
+    >>> records_from_csv(csv_file)
     [{'Name': 'Work on CSV Exporter', 'Status': 'Doing', 'Tags': 'notion'}]
     """
     records = []
-    # encoding='utf-8-sig' avoids the bom unicode header
-    with open(filename, encoding='utf-8-sig') as csvfile:
-        for row in csv.DictReader(csvfile):
-            records.append(row)
+    for row in csv.DictReader(csv_file):
+        records.append(row)
     return records
 
 
