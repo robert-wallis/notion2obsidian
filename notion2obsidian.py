@@ -21,14 +21,16 @@ def main(argv=sys.argv):
     """CLI for notion2obsidian.py
 
     >>> main(['notion2obsidian.py', 'test_data/export.zip'])
-    test_data/ziptest/Zip Example.md
     test_data/ziptest/Zip Table.md
+    test_data/ziptest/Zip Example.md
     >>> delete_path('test_data/ziptest')
 
     >>> main(['notion2obsidian.py', 'test_data'])
     test_data/export/Table.md
     test_data/export/Example.md
     >>> delete_path('test_data/export')
+
+    >>> main(['notion2obsidian.py'])
     """
     if len(argv) == 2:
         option = argv[1]
@@ -44,13 +46,25 @@ def main(argv=sys.argv):
 
 
 def delete_path(rootpath: str):
+    """Recrusively delete a folder.
+    >>> import tempfile
+    >>> tdir = tempfile.TemporaryDirectory()
+    >>> os.mkdir(os.path.join(tdir.name, 'testdir'))
+    >>> open(os.path.join(tdir.name, 'testdir/test.txt'), 'w').close()
+    >>> os.path.exists(tdir.name)
+    True
+    >>> delete_path(tdir.name)
+    >>> os.path.exists(tdir.name)
+    False
+    """
     if os.path.exists(rootpath):
         for (rootpath, dirs, files) in os.walk(rootpath):
             for filename in files:
                 fullpath = os.path.join(rootpath, filename)
                 os.remove(fullpath)
             for dirname in dirs:
-                os.rmdir(dirname)
+                fullpath = os.path.join(rootpath, dirname)
+                delete_path(fullpath)
         os.rmdir(rootpath)
 
 
@@ -68,15 +82,15 @@ def walk_files(rootpath: str):
     for (rootpath, dirs, files) in os.walk(rootpath):
         for filename in files:
             fullpath = os.path.join(rootpath, filename)
-            if '__MACOSX' == filename[:8]:
+            if '__MACOSX' in fullpath:
                 # these files are some binary Apple provenance file with a .md extension
                 continue
-            elif '.md' == filename[-3:]:
+            elif '.md' == fullpath[-3:]:
                 outfile = remove_md5_from_filename(fullpath)
                 clean_and_make_dir_for_filename(outfile)
                 print(outfile)
                 process_markdown(open(fullpath, mode='r'), open(outfile, mode='w'))
-            elif '.csv' == filename[-4:]:
+            elif '.csv' == fullpath[-4:]:
                 outfile = remove_md5_from_filename(fullpath)
                 outfile = outfile.replace('.csv', '.md')
                 clean_and_make_dir_for_filename(outfile)
@@ -91,8 +105,8 @@ def notion_zip(zip_filename: str):
     """Unzips a notion.so export, and converts the files.
     >>> delete_path('test_data/ziptest')
     >>> notion_zip('test_data/export.zip')
-    test_data/ziptest/Zip Example.md
     test_data/ziptest/Zip Table.md
+    test_data/ziptest/Zip Example.md
     >>> os.listdir('test_data/ziptest')
     ['Zip Table.md', 'Zip Example.md']
     >>> delete_path('test_data/ziptest')
@@ -101,11 +115,11 @@ def notion_zip(zip_filename: str):
     rootpath = os.path.dirname(zip_filename)
     with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
         for filename in zip_ref.namelist():
-            if '__MACOSX' == filename[:8]:
+            outfile = os.path.join(rootpath, filename)
+            if '__MACOSX' in outfile:
                 # these files are some binary Apple provenance file with a .md extension
                 continue
-            elif '.md' == filename[-3:]:
-                outfile = os.path.join(rootpath, filename)
+            elif '.md' == outfile[-3:]:
                 outfile = remove_md5_from_filename(outfile)
                 clean_and_make_dir_for_filename(outfile)
                 in_file = zip_ref.open(filename)
@@ -113,8 +127,7 @@ def notion_zip(zip_filename: str):
                 in_file = io.TextIOWrapper(io.BytesIO(zip_ref.read(filename)), encoding='utf-8-sig')
                 print(outfile)
                 process_markdown(in_file, open(outfile, mode='w'))
-            elif '.csv' == filename[-4:]:
-                outfile = os.path.join(rootpath, filename)
+            elif '.csv' == outfile[-4:]:
                 outfile = remove_md5_from_filename(outfile)
                 outfile = outfile.replace('.csv', '.md')
                 clean_and_make_dir_for_filename(outfile)
@@ -122,8 +135,6 @@ def notion_zip(zip_filename: str):
                 in_file = io.TextIOWrapper(io.BytesIO(zip_ref.read(filename)), encoding='utf-8-sig')
                 print(outfile)
                 process_csv(in_file, open(outfile, mode='w'))
-            else:
-                zip_ref.extract(filename)
 
 
 def clean_and_make_dir_for_filename(filename: str):
