@@ -17,10 +17,21 @@ URL_MD5_PATTERN = re.compile(r'%20[a-fA-F0-9]{32}')
 MD5_PATTERN = re.compile(r'\s*[a-fA-F0-9]{32}')
 
 
-def main():
-    """CLI for notion2obsidian.py"""
-    if len(sys.argv) == 2:
-        option = sys.argv[1]
+def main(argv=sys.argv):
+    """CLI for notion2obsidian.py
+
+    >>> main(['notion2obsidian.py', 'test_data/export.zip'])
+    test_data/ziptest/Zip Example.md
+    test_data/ziptest/Zip Table.md
+    >>> delete_path('test_data/ziptest')
+
+    >>> main(['notion2obsidian.py', 'test_data'])
+    test_data/export/Table.md
+    test_data/export/Example.md
+    >>> delete_path('test_data/export')
+    """
+    if len(argv) == 2:
+        option = argv[1]
         if os.path.isfile(option):
             if '.zip' == option[-4:]:
                 notion_zip(option)
@@ -46,10 +57,11 @@ def delete_path(rootpath: str):
 def walk_files(rootpath: str):
     """Recrusively go through folder looking for files to convert, and convert them.
     >>> delete_path('test_data/export')
-    >>> walk_files('test_data')
+    >>> walk_files('test_data/export aabbccddeeff00112233445566778899')
+    test_data/export/Table.md
     test_data/export/Example.md
     >>> os.listdir('test_data/export')
-    ['Example.md']
+    ['Example.md', 'Table.md']
     >>> delete_path('test_data/export')
     """
     # delete everything in the directory rootpath
@@ -66,6 +78,7 @@ def walk_files(rootpath: str):
                 process_markdown(open(fullpath, mode='r'), open(outfile, mode='w'))
             elif '.csv' == filename[-4:]:
                 outfile = remove_md5_from_filename(fullpath)
+                outfile = outfile.replace('.csv', '.md')
                 clean_and_make_dir_for_filename(outfile)
                 print(outfile)
                 # skip the BOM by opening as a utf-8-sig
@@ -76,12 +89,13 @@ def walk_files(rootpath: str):
 
 def notion_zip(zip_filename: str):
     """Unzips a notion.so export, and converts the files.
-    >>> delete_path('test_data/export')
+    >>> delete_path('test_data/ziptest')
     >>> notion_zip('test_data/export.zip')
-    test_data/export/Example.md
-    >>> os.listdir('test_data/export')
-    ['Example.md']
-    >>> delete_path('test_data/export')
+    test_data/ziptest/Zip Example.md
+    test_data/ziptest/Zip Table.md
+    >>> os.listdir('test_data/ziptest')
+    ['Zip Table.md', 'Zip Example.md']
+    >>> delete_path('test_data/ziptest')
     """
     import zipfile
     rootpath = os.path.dirname(zip_filename)
@@ -102,6 +116,7 @@ def notion_zip(zip_filename: str):
             elif '.csv' == filename[-4:]:
                 outfile = os.path.join(rootpath, filename)
                 outfile = remove_md5_from_filename(outfile)
+                outfile = outfile.replace('.csv', '.md')
                 clean_and_make_dir_for_filename(outfile)
                 import io
                 in_file = io.TextIOWrapper(io.BytesIO(zip_ref.read(filename)), encoding='utf-8-sig')
