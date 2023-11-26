@@ -138,7 +138,21 @@ def notion_zip(zip_filename: str):
 
 
 def clean_and_make_dir_for_filename(filename: str):
-    """Makes a folder if it doesn't exist."""
+    """Makes a folder if it doesn't exist.
+    >>> old_path = os.path.abspath('.')
+    >>> import tempfile
+    >>> tdir = tempfile.TemporaryDirectory()
+    >>> os.chdir(tdir.name)
+    >>> clean_and_make_dir_for_filename('test.md')
+    >>> empty_dir = os.listdir('.')
+    >>> clean_and_make_dir_for_filename('folder/test.md')
+    >>> one_folder = os.listdir('.')
+    >>> os.chdir(old_path) # cleanup before testing result
+    >>> empty_dir
+    []
+    >>> one_folder
+    ['folder']
+    """
     dirname = os.path.dirname(filename)
     if len(dirname) == 0 or dirname == '.' or dirname == '/':
         return
@@ -223,11 +237,11 @@ def process_csv(csv_file: TextIO, kanban_file: TextIO):
 
     for status in statuses:
         kanban_write_column(kanban_file, status)
-        if status in status_records:
-            for record in status_records[status]:
-                tags = [record['Tags']] if 'Tags' in record else []
-                params = {p:record[p] for p in unknown_params if p in record}
-                kanban_write_card(kanban_file, status, record[title_key], tags, params)
+
+        for record in status_records[status]:
+            tags = [record['Tags']] if 'Tags' in record else []
+            params = {p:record[p] for p in unknown_params if p in record}
+            kanban_write_card(kanban_file, status, record[title_key], tags, params)
         kanban_file.write('\n\n')
 
 
@@ -306,14 +320,14 @@ def records_from_csv(csv_file: TextIO):
     return records
 
 
-def statuses_from_csv(csv_data: list[dict], default_status='TODO'):
+def statuses_from_csv(csv_data: list[dict], default_status=''):
     """Returns a list of unique statuses from a csv file.
     csv_data is a list of dicts, each dict is a row in the csv file.
     >>> statuses_from_csv([{'Status': ''}, {'Status': 'Doing'}, {'Status': 'Done'}])
     ['', 'Doing', 'Done']
 
     >>> statuses_from_csv([{}, {}, {}])
-    ['TODO']
+    ['']
     """
     statuses = []
     for row in csv_data:
