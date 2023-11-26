@@ -1,6 +1,6 @@
 [project]
 name = "notion2obsidian"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
 	{ name = "Robert Wallis", email = "smilingrob@gmail.com" },
 ]

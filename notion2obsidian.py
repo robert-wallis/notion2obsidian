@@ -21,9 +21,9 @@ def main(argv=sys.argv):
     """CLI for notion2obsidian.py
 
     >>> main(['notion2obsidian.py', 'test_data/export.zip'])
-    test_data/ziptest/Zip Table.md
-    test_data/ziptest/Zip Example.md
-    >>> delete_path('test_data/ziptest')
+    ziptest/Zip Table.md
+    ziptest/Zip Example.md
+    >>> delete_path('ziptest')
 
     >>> main(['notion2obsidian.py', 'test_data'])
     test_data/export/Table.md
@@ -103,16 +103,20 @@ def walk_files(rootpath: str):
 
 def notion_zip(zip_filename: str):
     """Unzips a notion.so export, and converts the files.
+    >>> old_dir = os.path.abspath('.')
     >>> delete_path('test_data/ziptest')
-    >>> notion_zip('test_data/export.zip')
-    test_data/ziptest/Zip Table.md
-    test_data/ziptest/Zip Example.md
-    >>> os.listdir('test_data/ziptest')
+    >>> os.mkdir('test_data/ziptest')
+    >>> os.chdir('test_data/ziptest')
+    >>> notion_zip('../export.zip')
+    ziptest/Zip Table.md
+    ziptest/Zip Example.md
+    >>> os.listdir('ziptest')
     ['Zip Table.md', 'Zip Example.md']
+    >>> os.chdir(old_dir)
     >>> delete_path('test_data/ziptest')
     """
     import zipfile
-    rootpath = os.path.dirname(zip_filename)
+    rootpath = os.path.dirname(".")
     with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
         for filename in zip_ref.namelist():
             outfile = os.path.join(rootpath, filename)
