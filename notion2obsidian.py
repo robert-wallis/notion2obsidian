@@ -204,7 +204,7 @@ def remove_md5_from_filename(filename: str):
 def process_csv(csv_file: TextIO, kanban_file: TextIO):
     """Migrates a notion.so table to an obsidian kanban file.
     >>> import io
-    >>> csv_file = io.StringIO('\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\n')
+    >>> csv_file = io.StringIO('\ufeffName,Status,Tags\\nWork on CSV Exporter,Doing,notion\\nWrite doctests,Doing,\\n')
     >>> kanban_file = io.StringIO()
     >>> process_csv(csv_file, kanban_file)
     >>> print(kanban_file.getvalue()) # doctest: +NORMALIZE_WHITESPACE
@@ -213,6 +213,7 @@ def process_csv(csv_file: TextIO, kanban_file: TextIO):
     ---
     ## Doing
     - [ ] Work on CSV Exporter #notion
+    - [ ] Write doctests
 
 
     Empty CSV File
@@ -239,7 +240,7 @@ def process_csv(csv_file: TextIO, kanban_file: TextIO):
         kanban_write_column(kanban_file, status)
 
         for record in status_records[status]:
-            tags = [record['Tags']] if 'Tags' in record else []
+            tags = [record['Tags']] if 'Tags' in record and record['Tags'] else []
             params = {p:record[p] for p in unknown_params if p in record}
             kanban_write_card(kanban_file, status, record[title_key], tags, params)
         kanban_file.write('\n\n')
@@ -286,10 +287,12 @@ def kanban_write_card(kanban_file, status:str, title:str, tags:list[str], unknow
     >>> import io
     >>> kanban_file = io.StringIO()
     >>> kanban_write_card(kanban_file, 'Doing', 'Work on CSV Exporter', [], {})
-    >>> kanban_write_card(kanban_file, 'Done', 'Write doctests', ['notion'], {'unknown': 'param'})
+    >>> kanban_write_card(kanban_file, 'Done', 'Write doctests', ['notion', ''], {})
+    >>> kanban_write_card(kanban_file, 'Done', 'Test params', ['notion', ''], {'unknown': 'param', 'other': '', '': 'Empty Param'})
     >>> print(kanban_file.getvalue())
     - [ ] Work on CSV Exporter
-    - [x] Write doctests unknown:param #notion
+    - [x] Write doctests #notion
+    - [x] Test params unknown:param Empty Param #notion
     <BLANKLINE>
     """
     line = '- '
@@ -299,11 +302,15 @@ def kanban_write_card(kanban_file, status:str, title:str, tags:list[str], unknow
         line += f'[ ] {title}'
 
     for key, value in unknown_params.items():
-        line += f' {key}:{value}'
+        if len(key) and len(value):
+            line += f' {key}:{value}'
+        elif len(value):
+            line += f' {value}'
 
     if len(tags):
         for tag in tags:
-            line += f' #{tag}'
+            if len(tag):
+                line += f' #{tag}'
     kanban_file.write(line)
     kanban_file.write('\n')
 
