@@ -140,6 +140,8 @@ def notion_zip(zip_filename: str):
 def clean_and_make_dir_for_filename(filename: str):
     """Makes a folder if it doesn't exist."""
     dirname = os.path.dirname(filename)
+    if len(dirname) == 0 or dirname == '.' or dirname == '/':
+        return
     cleaned = remove_md5_from_filename(dirname)
     if not os.path.exists(cleaned):
         os.makedirs(cleaned, exist_ok=True)
